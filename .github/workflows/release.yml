@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  TARGET: aarch64-unknown-linux-gnu
+
+jobs:
+  release:
+    name: Build and publish aarch64 release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Cross-compile aprs-streamd
+        run: cross build --release --target "$TARGET" -p aprs-streamd
+
+      - name: Package release bundle
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PKG="aprs-streamd-${TAG}-aarch64-linux"
+          mkdir -p "dist/${PKG}"
+          cp "target/${TARGET}/release/aprs-streamd" "dist/${PKG}/"
+          cp deploy/aprs-streamd.service \
+             deploy/aprs-streamd.default \
+             deploy/install.sh \
+             deploy/uninstall.sh \
+             deploy/README.md \
+             config.toml \
+             "dist/${PKG}/"
+          chmod +x "dist/${PKG}/install.sh" "dist/${PKG}/uninstall.sh"
+          tar -C dist -czf "dist/${PKG}.tar.gz" "${PKG}"
+          ( cd dist && sha256sum "${PKG}.tar.gz" > SHA256SUMS )
+          ls -l dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true

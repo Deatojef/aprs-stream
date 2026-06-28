@@ -1,0 +1,14 @@
+# Environment overrides for aprs-streamd (sourced by the systemd unit).
+# Uncomment / edit and then: sudo systemctl restart aprs-streamd
+
+# Log verbosity. Default is "info".
+RUST_LOG=info
+
+# Examples:
+#   RUST_LOG=debug                 # everything at debug
+#   RUST_LOG=aprs_rtp=debug,info   # verbose aprs-rtp, info elsewhere
+#   RUST_LOG=warn                  # quiet
+
+# Point at an alternate config file (otherwise the unit passes
+# /etc/aprs-streamd/config.toml explicitly):
+# APRS_STREAMD_CONFIG=/etc/aprs-streamd/config.toml

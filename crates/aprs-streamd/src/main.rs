@@ -10,22 +10,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use aprs_rtp::{AprsListener, AprsPacket as RtpPacket};
 use aprs_stream::emit::{EmitConfig, Emitter};
 use aprs_stream::proto::{AprsFrame, AudioLevel, CaptureMeta, RfMeta};
+use tracing_subscriber::EnvFilter;
 
 mod config;
 use config::Config;
 
 #[tokio::main]
 async fn main() {
+    // Initialize logging first so everything below (including aprs-rtp's internal
+    // `tracing` output) is captured. Honors RUST_LOG; defaults to `info`.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .with_target(false)
+        .init();
+
     if let Err(e) = run().await {
-        // Print the Display message (not Debug) so config errors read cleanly.
-        eprintln!("aprs-streamd: {e}");
+        // Display (not Debug) so config errors read cleanly.
+        tracing::error!("{e}");
         std::process::exit(1);
     }
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (path, cfg) = Config::load()?;
-    eprintln!("aprs-streamd: loaded config from {}", path.display());
+    tracing::info!("loaded config from {}", path.display());
 
     let receiver = cfg.source.host.clone();
 
@@ -35,8 +45,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         multicast_ttl: cfg.emit.ttl,
     })?;
 
-    eprintln!(
-        "aprs-streamd: listening on RTP {}:{}, publishing to {:?} (TTL {})",
+    tracing::info!(
+        "listening on RTP {}:{}, publishing to {:?} (TTL {})",
         cfg.source.host,
         cfg.source.port,
         cfg.emit.destinations(),
@@ -49,11 +59,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         let frame = map_frame(pkt, &receiver);
         if let Err(e) = emitter.send_frame(&frame).await {
             // Best-effort medium: log and keep going rather than tearing down.
-            eprintln!("aprs-streamd: emit error: {e}");
+            tracing::warn!("emit error: {e}");
         }
     }
 
-    eprintln!("aprs-streamd: RTP stream closed, exiting.");
+    tracing::info!("RTP stream closed, exiting.");
     Ok(())
 }
 

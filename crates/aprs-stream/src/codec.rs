@@ -77,8 +77,7 @@ mod tests {
 
     #[test]
     fn round_trip_position() {
-        let frame =
-            frame_from_tnc2(b"W1AW-9>APRS,WIDE1-1,WIDE2-2:!4903.50N/07201.75W-EOSS chase");
+        let frame = frame_from_tnc2(b"W1AW-9>APRS,WIDE1-1,WIDE2-2:!4903.50N/07201.75W-EOSS chase");
         let bytes = encode(&frame).expect("encode");
         let back = decode(&bytes).expect("decode");
         assert_eq!(frame, back);

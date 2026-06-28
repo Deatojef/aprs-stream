@@ -1,0 +1,46 @@
+[Unit]
+Description=APRS stream base service (RTP -> decode -> publish typed frames)
+Documentation=https://github.com/Deatojef/aprs-stream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/aprs-streamd /etc/aprs-streamd/config.toml
+User=aprs-streamd
+Group=aprs-streamd
+Restart=on-failure
+RestartSec=5
+# Optional overrides (e.g. RUST_LOG). The leading '-' makes it optional.
+EnvironmentFile=-/etc/default/aprs-streamd
+
+# --- Hardening: the service is stateless and needs no special privileges ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# AF_UNIX / AF_NETLINK are required for hostname resolution, including mDNS
+# (.local) lookups via avahi — the default config uses an mDNS source host.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-streamd
+
+[Install]
+WantedBy=multi-user.target

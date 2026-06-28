@@ -93,7 +93,10 @@ async fn emit_then_receive_round_trips_over_udp() {
 
     let frame = sample_frame();
     let sent = emitter.send_frame(&frame).await.expect("send");
-    assert!(sent < 1400, "frame should fit a safe UDP payload: {sent} bytes");
+    assert!(
+        sent < 1400,
+        "frame should fit a safe UDP payload: {sent} bytes"
+    );
 
     let (got, _from) = tokio::time::timeout(Duration::from_secs(2), sub.recv_frame())
         .await
