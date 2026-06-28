@@ -1,0 +1,16 @@
+[package]
+name = "aprs-streamd"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Base APRS service: RTP -> decode -> publish typed frames (reference producer)"
+
+[dependencies]
+aprs-stream = { workspace = true }
+aprs-decode = { workspace = true }
+aprs-rtp = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+toml = "0.8"

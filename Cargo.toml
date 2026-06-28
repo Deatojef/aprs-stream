@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/aprs-stream",
+    "crates/aprs-streamd",
+    "examples/echo-consumer",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/deatojef/aprs-stream"
+
+[workspace.dependencies]
+aprs-stream = { path = "crates/aprs-stream" }
+
+# External crates from crates.io (NOT workspace members):
+# aprs-decode is pure parse logic (no network/audio) and provides the typed
+# payload schema reused on the wire; aprs-rtp owns the RTP/audio/DSP stack and is
+# only pulled in by aprs-streamd.
+aprs-decode = { version = "0.1.2", features = ["serde"] }
+aprs-rtp = "0.2.0"
+
+serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
+serde_json = "1"
+ciborium = "0.2"
+thiserror = "2"
+socket2 = "0.5"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }

@@ -1,0 +1,58 @@
+# aprs-streamd configuration.
+#
+# Search order (first match wins):
+#   1. path given as the first CLI argument  (aprs-streamd /path/to/config.toml)
+#   2. $APRS_STREAMD_CONFIG
+#   3. ./config.toml            (local development — this file)
+#   4. /etc/aprs-streamd/config.toml   (intended deployed location)
+#
+# Commented-out keys show their built-in default; uncomment to override.
+
+# ── RTP audio source ────────────────────────────────────────────────────────
+# Where aprs-streamd listens for ka9q-radio PCM audio (handled by aprs-rtp).
+[source]
+# mDNS hostname (e.g. "packet.local") or a raw multicast address (e.g. "239.0.0.1").
+host = "packet.local"
+# RTP port.
+# port = 5004
+# Network interface IP to bind to. Empty / omitted = OS default. Set explicitly
+# on a multi-homed host.
+# interface = "192.168.1.10"
+# RTP reorder window in packets (~80 ms at 24 kHz with the default of 2).
+# jitter_buffer = 2
+# SSRC allowlist. Empty = accept every SSRC on the group. Each SSRC maps 1:1 to a
+# radiod demodulator channel (frequency).
+# ssrc = [144390, 144340]
+
+# ── Decoder tuning ──────────────────────────────────────────────────────────
+# AFSK demodulator / slicer settings (aprs-rtp). Defaults suit standard 1200-baud
+# APRS; leave the whole section out to accept all defaults.
+[decoder]
+# mark_hz = 1200
+# space_hz = 2200
+# baud = 1200
+# Parallel amplitude-imbalance slicers (1–16). More = better weak-signal capture
+# at higher CPU cost.
+# slicers = 8
+# Slicer ladder range in twist dB (mark-minus-space). The default -12..+9 over 8
+# slicers is a 3 dB step with a rung landing on 0 dB.
+# min_twist_db = -12.0
+# max_twist_db = 9.0
+# CRC error-recovery mode: "none", "single", or "double".
+# fix_bits = "single"
+
+# ── Publish (emit) side ─────────────────────────────────────────────────────
+# Where decoded frames are published. The multicast group is always a destination;
+# add explicit unicast targets for the cross-VLAN / reliability escape hatch.
+[emit]
+# Multicast group to publish on (administratively-scoped 239.x range).
+group = "239.12.34.56"
+# UDP port.
+port = 17014
+# Local interface to send from. 0.0.0.0 = OS chooses; set explicitly on a
+# multi-homed host so multicast egresses the right interface.
+# interface = "0.0.0.0"
+# Multicast TTL. 1 keeps traffic on-subnet (the safe default).
+# ttl = 1
+# Extra unicast destinations as "ip:port". Each decoded frame is also sent here.
+# destinations = ["10.0.5.20:17014", "10.0.5.21:17014"]
