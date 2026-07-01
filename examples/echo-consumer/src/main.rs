@@ -7,6 +7,7 @@
 use std::net::Ipv4Addr;
 
 use aprs_stream::aprs_decode::{AprsData, AprsPacket};
+use aprs_stream::proto::Ax25Meta;
 use aprs_stream::subscribe::{SubscribeConfig, Subscriber};
 
 /// Must match `aprs-streamd`'s default group / port.
@@ -52,6 +53,75 @@ fn print_frame(frame: &aprs_stream::AprsFrame, from: &str) {
             frame.ax25.len(),
         ),
     }
+
+    print_meta(frame);
+}
+
+/// Second line dumping the v2 framing metadata, so it's obvious at a glance
+/// whether the producer is actually populating `ax25_meta` / `slicer_gains` on
+/// the wire. A `<none>` here means the frame arrived without that block —
+/// either a pre-v2 producer or a mapping bug.
+fn print_meta(frame: &aprs_stream::AprsFrame) {
+    match &frame.ax25_meta {
+        Some(m) => {
+            let dti = m
+                .dti
+                .map(|b| format!("'{}'", b as char))
+                .unwrap_or_else(|| "none".into());
+            // Prove info_offset points at real bytes: slice the raw AX.25 with it
+            // and show how many info bytes that yields (byte-faithful igating path).
+            let info_len = m
+                .info_offset
+                .and_then(|off| frame.ax25.get(off as usize..))
+                .map(<[u8]>::len);
+            println!(
+                "    ax25: {}>{} via [{}] direct={} heard_from={} dti={} info@{} len={} invalid={}",
+                m.source,
+                m.destination,
+                render_via(m),
+                m.heard_direct,
+                m.heard_from,
+                dti,
+                m.info_offset
+                    .map(|o| o.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                info_len
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                m.info_invalid_bytes,
+            );
+        }
+        None => println!("    ax25: <none>"),
+    }
+
+    match &frame.rf.slicer_gains {
+        Some(g) => {
+            // Show the ladder as twist dB (20·log10 gain) — the waterfall labels.
+            let twist: Vec<String> = g
+                .iter()
+                .map(|x| format!("{:+.0}", 20.0 * x.log10()))
+                .collect();
+            println!(
+                "    rf: slicers={} twist_db=[{}] mask={:#06x}",
+                g.len(),
+                twist.join(","),
+                frame.rf.slicer_mask.unwrap_or(0),
+            );
+        }
+        None => println!("    rf: slicer_gains <none>"),
+    }
+}
+
+/// Render the digipeater path with TNC2 `*` markers on heard (H-bit-set) hops.
+fn render_via(m: &Ax25Meta) -> String {
+    if m.via.is_empty() {
+        return "(none)".into();
+    }
+    m.via
+        .iter()
+        .map(|h| format!("{}{}", h.call, if h.heard { "*" } else { "" }))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Reconstruct the canonical TNC2 line (`FROM>TO,VIA:info`) for display. Info
@@ -104,5 +174,25 @@ mod tests {
         let pkt = AprsPacket::decode_textual(line).unwrap();
         assert_eq!(tnc2(&pkt), String::from_utf8_lossy(line));
         assert_eq!(payload_summary(&pkt.data), "Position");
+    }
+
+    #[test]
+    fn render_via_marks_heard_hops() {
+        use aprs_stream::proto::ViaHop;
+        let m = Ax25Meta {
+            via: vec![
+                ViaHop {
+                    call: "W1XYZ-1".into(),
+                    heard: true,
+                },
+                ViaHop {
+                    call: "WIDE2-1".into(),
+                    heard: false,
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(render_via(&m), "W1XYZ-1*,WIDE2-1");
+        assert_eq!(render_via(&Ax25Meta::default()), "(none)");
     }
 }
