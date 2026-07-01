@@ -68,9 +68,11 @@ mod tests {
                 }),
                 slicer_hits: Some(6),
                 slicer_mask: Some(0b0011_1110),
+                slicer_gains: Some(vec![0.5, 0.7, 1.0, 1.4, 2.0]),
             },
             true,
             ax25,
+            None,
             Some(packet),
         )
     }
@@ -114,6 +116,7 @@ mod tests {
             true,
             vec![0x82, 0xa0, 0xb4, 0x00, 0xff, 0x03, 0xf0],
             None,
+            None,
         );
         let bytes = encode(&frame).expect("encode");
         let back = decode(&bytes).expect("decode");
@@ -138,6 +141,7 @@ mod tests {
             true,
             ax25.clone(),
             None,
+            None,
         );
         let bytes = encode(&frame).expect("encode");
         assert!(
@@ -159,5 +163,123 @@ mod tests {
         let json = to_json(&bytes).expect("to_json");
         assert!(json.contains("\"version\""));
         assert!(json.contains("\"parsed\""));
+    }
+
+    #[test]
+    fn ax25_meta_round_trips_with_heard_bits() {
+        let meta = Ax25Meta {
+            source: "W1AW-9".into(),
+            destination: "APRS".into(),
+            via: vec![
+                ViaHop {
+                    call: "W1XYZ-1".into(),
+                    heard: true,
+                },
+                ViaHop {
+                    call: "WIDE2-1".into(),
+                    heard: false,
+                },
+            ],
+            heard_direct: false,
+            heard_from: "W1XYZ-1".into(),
+            dti: Some(b'!'),
+            info_offset: Some(16),
+            info_invalid_bytes: 1,
+        };
+        let frame = AprsFrame::new(
+            CaptureMeta {
+                received_at_ms: 7,
+                receiver: None,
+                decoder: None,
+                ssrc: None,
+            },
+            RfMeta::default(),
+            true,
+            vec![0u8; 24],
+            Some(meta.clone()),
+            None,
+        );
+        let back = decode(&encode(&frame).expect("encode")).expect("decode");
+        assert_eq!(back.ax25_meta.as_ref(), Some(&meta));
+    }
+
+    #[test]
+    fn info_offset_slices_verbatim_info() {
+        // A frame whose info field includes a non-UTF-8 byte (0xff): the whole
+        // point of carrying the offset is byte-faithful info extraction. Header is
+        // an arbitrary address+control+PID stand-in; `ax25[info_offset..]` must be
+        // the exact info bytes.
+        let header = [0x82, 0xa0, 0xb4, 0x00, 0xff, 0x03, 0xf0];
+        let info: &[u8] = b"!4903.50N/07201.75W-\xff";
+        let mut ax25 = header.to_vec();
+        ax25.extend_from_slice(info);
+        let meta = Ax25Meta {
+            info_offset: Some(header.len() as u32),
+            ..Default::default()
+        };
+        let frame = AprsFrame::new(
+            CaptureMeta {
+                received_at_ms: 0,
+                receiver: None,
+                decoder: None,
+                ssrc: None,
+            },
+            RfMeta::default(),
+            true,
+            ax25,
+            Some(meta),
+            None,
+        );
+        let back = decode(&encode(&frame).expect("encode")).expect("decode");
+        let off = back.ax25_meta.unwrap().info_offset.unwrap() as usize;
+        assert_eq!(&back.ax25[off..], info);
+    }
+
+    #[test]
+    fn v1_era_frame_decodes_with_defaults() {
+        // Backward-compat guard: a producer predating the v2 fields emits a frame
+        // with neither `ax25_meta` nor the new RfMeta fields. Simulate it with a
+        // struct carrying only the original subset and confirm the missing fields
+        // deserialize to their defaults (`None`) rather than failing.
+        #[derive(serde::Serialize)]
+        struct OldRfMeta {
+            frequency_hz: Option<u64>,
+        }
+        #[derive(serde::Serialize)]
+        struct OldFrame {
+            version: u8,
+            capture: CaptureMeta,
+            rf: OldRfMeta,
+            crc_ok: bool,
+            #[serde(with = "serde_bytes")]
+            ax25: Vec<u8>,
+            parsed: Option<aprs_decode::AprsPacket>,
+        }
+
+        let old = OldFrame {
+            version: 1,
+            capture: CaptureMeta {
+                received_at_ms: 123,
+                receiver: None,
+                decoder: None,
+                ssrc: None,
+            },
+            rf: OldRfMeta {
+                frequency_hz: Some(144_390_000),
+            },
+            crc_ok: true,
+            ax25: vec![0x82, 0xa0, 0xb4, 0x00, 0xff, 0x03, 0xf0],
+            parsed: None,
+        };
+
+        let mut buf = Vec::new();
+        ciborium::into_writer(&old, &mut buf).expect("encode old frame");
+        let back = decode(&buf).expect("decode old frame");
+
+        assert_eq!(back.version, 1);
+        assert!(back.ax25_meta.is_none());
+        assert!(back.rf.slicer_gains.is_none());
+        assert!(back.rf.slicer_mask.is_none());
+        assert_eq!(back.rf.frequency_hz, Some(144_390_000));
     }
 }

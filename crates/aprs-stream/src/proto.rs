@@ -23,7 +23,12 @@ use serde::{Deserialize, Serialize};
 /// Current wire-format version. Bump on any breaking schema change — including
 /// any change to `aprs-decode`'s `AprsPacket`/`AprsData` representation, since
 /// that is now part of this wire format.
-pub const PROTOCOL_VERSION: u8 = 1;
+///
+/// - `1`: initial schema (capture/rf/crc_ok/ax25/parsed).
+/// - `2`: added [`Ax25Meta`] framing block (`ax25_meta`) and the per-frame slicer
+///   gain ladder (`RfMeta::slicer_gains`). Both additive and `#[serde(default)]`,
+///   so `1`-era consumers still decode `2` frames; the bump is honest signposting.
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// One fully-decoded APRS frame, as published on the wire (one per datagram).
 ///
@@ -52,6 +57,14 @@ pub struct AprsFrame {
     #[serde(with = "serde_bytes")]
     pub ax25: Vec<u8>,
 
+    /// AX.25-layer framing facts (source/dest/path/heard/dti + info offset),
+    /// decoded once by the producer so consumers never re-parse the frame to
+    /// recover them. Independent of APRS payload parseability — present even when
+    /// `parsed` is `None`. `#[serde(default)]` so `1`-era frames (which lack it)
+    /// decode to `None`.
+    #[serde(default)]
+    pub ax25_meta: Option<Ax25Meta>,
+
     /// The parsed APRS packet (source/dest/path + typed payload), so consumers
     /// `match` instead of re-parsing. `None` when the frame is FCS-valid but
     /// `aprs-decode` could not parse it — the raw `ax25` is still present.
@@ -66,6 +79,7 @@ impl AprsFrame {
         rf: RfMeta,
         crc_ok: bool,
         ax25: Vec<u8>,
+        ax25_meta: Option<Ax25Meta>,
         parsed: Option<aprs_decode::AprsPacket>,
     ) -> Self {
         Self {
@@ -74,9 +88,63 @@ impl AprsFrame {
             rf,
             crc_ok,
             ax25,
+            ax25_meta,
             parsed,
         }
     }
+}
+
+/// AX.25-layer framing facts, decoded once by the producer so consumers never
+/// re-parse the frame to recover them. Present even when the APRS payload could
+/// not be parsed (`AprsFrame::parsed == None`), which is exactly when a consumer
+/// would otherwise be forced to re-decode the raw AX.25 itself.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Ax25Meta {
+    /// Source callsign-SSID (e.g. "WA0DE-9").
+    pub source: String,
+
+    /// Destination / AX.25 "to" address (APRS tocall, e.g. "APDR15").
+    pub destination: String,
+
+    /// Digipeater path in order, each with its has-been-repeated (H-bit) flag —
+    /// the TNC2 `*` marker. Excludes source and destination.
+    #[serde(default)]
+    pub via: Vec<ViaHop>,
+
+    /// True iff no digipeater H-bits are set: heard directly, no repeater hop.
+    pub heard_direct: bool,
+
+    /// Station whose signal physically reached the receiver: the last H-bit-set
+    /// digipeater, or the source callsign when `heard_direct`.
+    pub heard_from: String,
+
+    /// APRS Data Type Identifier — the first info-field byte. `None` only for the
+    /// unusual empty-info UI frame.
+    #[serde(default)]
+    pub dti: Option<u8>,
+
+    /// Byte offset of the info field within [`AprsFrame::ax25`] (after the address
+    /// field + control + PID). Lets a consumer take the verbatim 8-bit info
+    /// payload as `ax25[info_offset..]` with no AX.25 re-parsing — needed for
+    /// byte-faithful igating. `None` if the producer couldn't determine it.
+    #[serde(default)]
+    pub info_offset: Option<u32>,
+
+    /// Advisory count of info bytes almost certainly not real APRS payload (C0
+    /// control bytes plus invalid UTF-8, e.g. a stuck transmitter's trailing
+    /// `0xFF`). `0` for a clean frame. The frame is still FCS-valid and the raw
+    /// bytes are untouched — a consumer may downrank/refuse a suspect frame.
+    #[serde(default)]
+    pub info_invalid_bytes: u32,
+}
+
+/// One digipeater-path element with its AX.25 has-been-repeated (H-bit) flag.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ViaHop {
+    /// The path callsign-SSID (e.g. "W1XYZ-1", "WIDE2-1").
+    pub call: String,
+    /// True if this hop's H-bit is set (it repeated the frame): the TNC2 `*`.
+    pub heard: bool,
 }
 
 /// When and by what this frame was captured.
@@ -126,6 +194,16 @@ pub struct RfMeta {
     /// Bitmask of which slicers decoded this frame (bit `i` = slicer `i`).
     #[serde(default)]
     pub slicer_mask: Option<u16>,
+
+    /// Per-slicer space-gain ladder the producer's decoder is running: linear
+    /// gain per slicer, ordered by slicer index. Static for a producer session,
+    /// but carried on every frame so a consumer joining the stream mid-flight is
+    /// never missing it (there is no producer-side connection state to replay it).
+    /// A slicer-diversity waterfall gets its column count from `slicer_gains.len()`
+    /// and each column's twist label as `20 * log10(gain)`. `None` if the producer
+    /// didn't supply it.
+    #[serde(default)]
+    pub slicer_gains: Option<Vec<f32>>,
 }
 
 /// Audio level measurements at packet-decode time, on direwolf's familiar

@@ -35,9 +35,11 @@ fn sample_frame() -> AprsFrame {
             }),
             slicer_hits: Some(6),
             slicer_mask: Some(0b0011_1110),
+            slicer_gains: Some(vec![0.5, 0.7, 1.0, 1.4, 2.0]),
         },
         true,
         ax25,
+        None,
         Some(packet),
     )
 }
