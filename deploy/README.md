@@ -1,17 +1,24 @@
 # Deploying aprs-streamd
 
 `aprs-streamd` ships as a Debian package (`.deb`) and runs as an unattended
-systemd service — typically on a 64-bit Raspberry Pi (aarch64 / Raspberry Pi OS).
-It listens to ka9q-radio RTP audio and republishes decoded, typed APRS frames on
-the LAN. Once installed it just runs: auto-starts on boot, restarts on failure.
+systemd service — on a 64-bit Raspberry Pi (aarch64 / Raspberry Pi OS) or any
+x86_64 Debian/Ubuntu host. It listens to ka9q-radio RTP audio and republishes
+decoded, typed APRS frames on the LAN. Once installed it just runs: auto-starts
+on boot, restarts on failure.
 
-## Install (on the Pi)
+## Install
 
-Download the latest `aprs-streamd_X.Y.Z-1_arm64.deb` from the
-[Releases page](https://github.com/Deatojef/aprs-stream/releases), then:
+Each release ships two packages — pick the one for your hardware:
+
+- **`aprs-streamd_X.Y.Z-1_arm64.deb`** — 64-bit Raspberry Pi / other aarch64.
+- **`aprs-streamd_X.Y.Z-1_amd64.deb`** — x86_64 Debian/Ubuntu.
+
+Download it from the
+[Releases page](https://github.com/Deatojef/aprs-stream/releases) (run
+`dpkg --print-architecture` if unsure which you need), then:
 
 ```sh
-sudo apt install ./aprs-streamd_X.Y.Z-1_arm64.deb
+sudo apt install ./aprs-streamd_X.Y.Z-1_<arch>.deb
 ```
 
 `apt` pulls in any dependencies and runs the package's setup, which creates a
@@ -43,7 +50,7 @@ Restart after editing.
 ## Upgrade
 
 ```sh
-sudo apt install ./aprs-streamd_X.Y.Z-1_arm64.deb   # newer version
+sudo apt install ./aprs-streamd_X.Y.Z-1_<arch>.deb   # newer version
 ```
 
 `/etc/aprs-streamd/config.toml` and `/etc/default/aprs-streamd` are marked as
@@ -69,8 +76,9 @@ From a clean `main` on your dev machine:
 This runs the pre-flight gate (fmt, clippy, tests), bumps the `aprs-streamd`
 crate version, commits, and pushes the `vX.Y.Z` tag. The
 [`release.yml`](../.github/workflows/release.yml) workflow then cross-compiles
-for aarch64, builds the `.deb` with [`cargo-deb`](https://github.com/kornelski/cargo-deb),
-and attaches it (plus `SHA256SUMS`) to a GitHub Release.
+for both aarch64 and x86_64 (a build matrix), builds a `.deb` for each with
+[`cargo-deb`](https://github.com/kornelski/cargo-deb), and attaches both (plus a
+combined `SHA256SUMS`) to a GitHub Release.
 
 Packaging is defined in `crates/aprs-streamd/Cargo.toml` under
 `[package.metadata.deb]`; the systemd unit, env file, and maintainer scripts

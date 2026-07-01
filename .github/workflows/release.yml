@@ -10,12 +10,19 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  TARGET: aarch64-unknown-linux-gnu
 
 jobs:
-  release:
-    name: Build and publish aarch64 release
+  build:
+    name: Build .deb (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+          - target: x86_64-unknown-linux-gnu
+            arch: amd64
     steps:
       - uses: actions/checkout@v4
 
@@ -28,18 +35,42 @@ jobs:
           cargo install cargo-deb --locked
 
       - name: Cross-compile aprs-streamd
-        run: cross build --release --target "$TARGET" -p aprs-streamd
+        run: cross build --release --target "${{ matrix.target }}" -p aprs-streamd
 
-      - name: Build .deb (arm64)
+      - name: Build .deb
         # --no-build: reuse the cross binary; --no-strip: it's already stripped
-        # via the release profile (host strip can't strip an aarch64 binary).
-        run: cargo deb -p aprs-streamd --target "$TARGET" --no-build --no-strip
+        # via the release profile (host strip can't strip a foreign-arch binary).
+        run: cargo deb -p aprs-streamd --target "${{ matrix.target }}" --no-build --no-strip
 
-      - name: Collect artifacts
+      - name: Stage artifact
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "target/${TARGET}/debian/"*.deb dist/
+          cp "target/${{ matrix.target }}/debian/"*.deb dist/
+          ls -l dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all .debs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          merge-multiple: true
+          path: dist
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
           ( cd dist && sha256sum ./*.deb > SHA256SUMS )
           ls -l dist
 
