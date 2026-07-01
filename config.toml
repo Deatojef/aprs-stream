@@ -34,10 +34,12 @@ host = "packet.local"
 # Parallel amplitude-imbalance slicers (1–16). More = better weak-signal capture
 # at higher CPU cost.
 # slicers = 8
+slicers = 9
 # Slicer ladder range in twist dB (mark-minus-space). The default -12..+9 over 8
 # slicers is a 3 dB step with a rung landing on 0 dB.
 # min_twist_db = -12.0
 # max_twist_db = 9.0
+max_twist_db = 12.0
 # CRC error-recovery mode: "none", "single", or "double".
 # fix_bits = "single"
 
