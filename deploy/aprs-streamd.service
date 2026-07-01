@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/aprs-streamd /etc/aprs-streamd/config.toml
+ExecStart=/usr/bin/aprs-streamd /etc/aprs-streamd/config.toml
 User=aprs-streamd
 Group=aprs-streamd
 Restart=on-failure

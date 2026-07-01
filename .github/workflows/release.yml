@@ -22,35 +22,31 @@ jobs:
       - name: Install Rust (stable)
         run: rustup toolchain install stable --profile minimal
 
-      - name: Install cross
-        run: cargo install cross --locked
+      - name: Install cross and cargo-deb
+        run: |
+          cargo install cross --locked
+          cargo install cargo-deb --locked
 
       - name: Cross-compile aprs-streamd
         run: cross build --release --target "$TARGET" -p aprs-streamd
 
-      - name: Package release bundle
+      - name: Build .deb (arm64)
+        # --no-build: reuse the cross binary; --no-strip: it's already stripped
+        # via the release profile (host strip can't strip an aarch64 binary).
+        run: cargo deb -p aprs-streamd --target "$TARGET" --no-build --no-strip
+
+      - name: Collect artifacts
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          PKG="aprs-streamd-${TAG}-aarch64-linux"
-          mkdir -p "dist/${PKG}"
-          cp "target/${TARGET}/release/aprs-streamd" "dist/${PKG}/"
-          cp deploy/aprs-streamd.service \
-             deploy/aprs-streamd.default \
-             deploy/install.sh \
-             deploy/uninstall.sh \
-             deploy/README.md \
-             config.toml \
-             "dist/${PKG}/"
-          chmod +x "dist/${PKG}/install.sh" "dist/${PKG}/uninstall.sh"
-          tar -C dist -czf "dist/${PKG}.tar.gz" "${PKG}"
-          ( cd dist && sha256sum "${PKG}.tar.gz" > SHA256SUMS )
+          mkdir -p dist
+          cp "target/${TARGET}/debian/"*.deb dist/
+          ( cd dist && sha256sum ./*.deb > SHA256SUMS )
           ls -l dist
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.tar.gz
+            dist/*.deb
             dist/SHA256SUMS
           generate_release_notes: true

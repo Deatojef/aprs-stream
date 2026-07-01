@@ -1,0 +1,17 @@
+#!/bin/sh
+# On purge, remove the dedicated service user/group. The systemd unit cleanup is
+# injected at the DEBHELPER marker below; dpkg removes the /etc conffiles itself.
+set -e
+
+#DEBHELPER#
+
+if [ "$1" = "purge" ]; then
+    if getent passwd aprs-streamd >/dev/null; then
+        deluser --system --quiet aprs-streamd || true
+    fi
+    if getent group aprs-streamd >/dev/null; then
+        delgroup --system --quiet aprs-streamd || true
+    fi
+fi
+
+exit 0

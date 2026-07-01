@@ -11,6 +11,11 @@ edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/deatojef/aprs-stream"
 
+# Strip symbols at link time so release binaries (and the .deb) stay small. Done
+# by the target linker, so it works cleanly for cross-compiled aarch64 builds.
+[profile.release]
+strip = true
+
 [workspace.dependencies]
 aprs-stream = { path = "crates/aprs-stream" }
 

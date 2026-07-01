@@ -16,3 +16,37 @@ thiserror = { workspace = true }
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ── Debian packaging (cargo-deb) ────────────────────────────────────────────
+# Paths are relative to this manifest's directory. Build with:
+#   cargo deb -p aprs-streamd                       # native
+#   cargo deb -p aprs-streamd --target <triple> --no-build --no-strip
+[package.metadata.deb]
+maintainer = "Jeff Deaton <deatojef@yahoo.com>"
+section = "hamradio"
+priority = "optional"
+# $auto -> dpkg-shlibdeps (libc, etc.); adduser is used by the maintainer scripts.
+depends = "$auto, adduser"
+extended-description = """\
+Base service for the disaggregated APRS pipeline. Demodulates and decodes APRS \
+packets from ka9q-radio RTP multicast audio and republishes fully-decoded, \
+richly-typed APRS frames on the LAN for downstream consumers (igate, logger, \
+trackers) to subscribe to."""
+assets = [
+    ["target/release/aprs-streamd", "usr/bin/", "755"],
+    ["../../config.toml", "etc/aprs-streamd/config.toml", "644"],
+    ["../../deploy/aprs-streamd.default", "etc/default/aprs-streamd", "644"],
+    ["../../README.md", "usr/share/doc/aprs-streamd/README.md", "644"],
+    ["../../deploy/README.md", "usr/share/doc/aprs-streamd/DEPLOY.md", "644"],
+]
+# Preserve local edits across upgrades (also auto-detected for /etc, but explicit).
+conf-files = ["/etc/aprs-streamd/config.toml", "/etc/default/aprs-streamd"]
+maintainer-scripts = "../../deploy/debian"
+
+# Install + enable the systemd unit (generates the maintainer-script fragments
+# merged at the #DEBHELPER# token in deploy/debian/post{inst,rm}).
+[package.metadata.deb.systemd-units]
+unit-scripts = "../../deploy"
+enable = true
+start = true
+restart-after-upgrade = true

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Create the dedicated, locked-down service user before the unit is enabled.
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd aprs-streamd >/dev/null; then
+        adduser --system --group --no-create-home \
+            --home /nonexistent --shell /usr/sbin/nologin \
+            --quiet aprs-streamd
+    fi
+fi
+
+#DEBHELPER#
+
+exit 0
