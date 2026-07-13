@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/aprs-modem",
+    "crates/aprs-sdr",
     "crates/aprs-stream",
     "crates/aprs-streamd",
     "examples/echo-consumer",
