@@ -10,7 +10,9 @@ description = "Base APRS service: RTP -> decode -> publish typed frames (referen
 aprs-stream = { workspace = true }
 aprs-decode = { workspace = true }
 aprs-rtp = { workspace = true }
-tokio = { workspace = true }
+aprs-modem = { path = "../aprs-modem" }
+aprs-sdr = { path = "../aprs-sdr" }
+tokio = { workspace = true, features = ["signal"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = "0.8"

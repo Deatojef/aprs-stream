@@ -1,0 +1,19 @@
+[package]
+name = "aprs-modem"
+version = "0.1.0"
+# Edition 2024 to match the vendored aprs-rtp sources (per-crate edition, so no
+# need to reconcile with the 2021 workspace). Requires rustc >= 1.85.
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+description = "Source-agnostic APRS decode core (AFSK/HDLC/AX.25), vendored from aprs-rtp minus the RTP front-end"
+
+[dependencies]
+serde = { workspace = true }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+tracing = "0.1"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }
