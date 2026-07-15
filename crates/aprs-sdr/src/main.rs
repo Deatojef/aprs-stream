@@ -6,7 +6,8 @@
 //!   APRS_SDR_CENTER_HZ        tuner centre frequency, Hz     (default 144_590_000)
 //!   APRS_SDR_CHANNELS_HZ      comma-separated channel freqs  (default 144_390_000)
 //!   APRS_SDR_SAMPLE_RATE      complex sample rate, Hz        (default 1_200_000)
-//!   APRS_SDR_GAIN_TENTHS      tuner gain, tenths dB; "auto" = AGC (default 400)
+//!   APRS_SDR_GAIN_TENTHS      tuner gain, tenths dB (default 400); "hw-agc" =
+//!                             the tuner's own AGC (diagnostic only)
 //!   APRS_SDR_PPM              frequency correction, ppm      (default 0)
 //!   APRS_SDR_FM_MAXDEV_HZ     FM deviation mapped to full-scale audio (level knob)
 //!   APRS_SDR_SQUELCH_OPEN_DB  squelch open threshold, dB SNR
@@ -59,11 +60,10 @@ fn env_bool(key: &str) -> bool {
     )
 }
 
-/// `APRS_SDR_GAIN_TENTHS`: unset → fixed default, a number → fixed, "auto" → the
-/// software gain manager, "hw-agc" → the tuner's own AGC.
+/// `APRS_SDR_GAIN_TENTHS`: unset → fixed default, a number → fixed,
+/// "hw-agc" → the tuner's own AGC (diagnostic only).
 fn parse_gain() -> Gain {
     match std::env::var("APRS_SDR_GAIN_TENTHS") {
-        Ok(v) if v.eq_ignore_ascii_case("auto") => Gain::Auto,
         Ok(v) if v.eq_ignore_ascii_case("hw-agc") => Gain::HardwareAgc,
         Ok(v) => match v.parse::<i32>() {
             Ok(n) => Gain::Manual(n),
@@ -93,8 +93,6 @@ fn main() {
         center_freq: env_u32("APRS_SDR_CENTER_HZ", 144_590_000),
         sample_rate: env_u32("APRS_SDR_SAMPLE_RATE", 1_200_000),
         gain: parse_gain(),
-        auto_target_floor_dbfs: env_opt_f32("APRS_SDR_AUTO_FLOOR_DBFS")
-            .unwrap_or(aprs_sdr::source::DEFAULT_AUTO_FLOOR_DBFS),
         freq_correction_ppm: env_u32("APRS_SDR_PPM", 0) as i32,
         channels,
         fm: FmParams {

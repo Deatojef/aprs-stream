@@ -110,7 +110,6 @@ async fn run_sdr(
         center_freq: sdr.center_hz,
         sample_rate: sdr.sample_rate,
         gain: to_gain(&sdr.gain),
-        auto_target_floor_dbfs: sdr.auto_floor_dbfs,
         freq_correction_ppm: sdr.ppm,
         channels: sdr.channels_hz.clone(),
         fm: aprs_sdr::FmParams {
@@ -172,10 +171,9 @@ async fn wait_for_shutdown() {
 fn to_gain(g: &GainSetting) -> aprs_sdr::Gain {
     match g {
         GainSetting::Tenths(n) => aprs_sdr::Gain::Manual(*n),
-        GainSetting::Mode(s) if s.eq_ignore_ascii_case("auto") => aprs_sdr::Gain::Auto,
         GainSetting::Mode(s) if s.eq_ignore_ascii_case("hw-agc") => aprs_sdr::Gain::HardwareAgc,
         GainSetting::Mode(s) => {
-            tracing::warn!("unknown gain '{s}' (expected a number, \"auto\", or \"hw-agc\"); using fixed 400 (40 dB)");
+            tracing::warn!("unknown gain '{s}' (expected a number or \"hw-agc\"); using fixed 400 (40 dB)");
             aprs_sdr::Gain::Manual(400)
         }
     }

@@ -39,35 +39,12 @@ pub struct SdrSourceConfig {
     /// Complex sample rate, Hz.
     pub sample_rate: u32,
     pub gain: Gain,
-    /// Noise-floor setpoint (dBFS) for [`Gain::Auto`]. Ignored otherwise.
-    ///
-    /// The tuner gain is stepped to hold the measured floor here. Higher (e.g.
-    /// -20) means more gain — better noise figure and weak-signal sensitivity, but
-    /// less ADC headroom before strong signals clip. Lower (e.g. -35) is the
-    /// opposite. The RTL's 8-bit ADC only has ~48 dB of range, so this is the
-    /// trade. Measure with the `front-end level` log line before changing it.
-    pub auto_target_floor_dbfs: f32,
     pub freq_correction_ppm: i32,
     /// Channel centre frequencies, Hz. Each becomes `ssrc = freq_kHz`.
     pub channels: Vec<u32>,
     pub fm: FmParams,
     pub decoder: DecoderConfig,
 }
-
-/// Default noise-floor setpoint for [`Gain::Auto`].
-///
-/// **This must be calibrated per site — `Gain::Auto` is experimental.** The
-/// floor-to-gain mapping is only stable when the captured span contains nothing
-/// but noise between bursts. [`LevelStats::floor_dbfs`] rejects *intermittent*
-/// signals (a low percentile lands on idle reads) but cannot reject a
-/// **continuous** in-band carrier — a permanent pager/repeater/spur anywhere in
-/// the span raises every percentile, so the "floor" becomes carrier+noise and the
-/// setpoint no longer corresponds to a fixed gain. Measured floor-vs-gain has
-/// drifted several dB between runs for that reason.
-///
-/// Prefer a fixed [`Gain::Manual`] chosen from observed catch rate for production;
-/// use `Auto` where conditions genuinely move (e.g. a balloon flight).
-pub const DEFAULT_AUTO_FLOOR_DBFS: f32 = -25.0;
 
 impl SdrSourceConfig {
     /// Reject a configuration that can't work before opening the device. Channels
@@ -101,12 +78,10 @@ impl SdrSourceConfig {
 ///
 /// 60 s keeps a multi-day run's log manageable (~1.4k lines/day) and makes the
 /// `frames` count a meaningful rate on its own rather than a 0-or-2 coin flip.
-/// It also bounds how often the [`GainManager`] can act, since it is consulted
-/// once per report.
 const LEVEL_REPORT_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Front-end level statistics over a reporting window — the numbers you need to
-/// pick a gain, and the inputs a future gain manager would close its loop on.
+/// choose a fixed gain and to spot a front end that has been driven too hard.
 ///
 /// The RTL-SDR's ADC is only 8-bit (~48 dB of range), so gain setting is a
 /// balance: enough that the band noise lifts clear of the ADC's own quantization
@@ -114,10 +89,11 @@ const LEVEL_REPORT_INTERVAL: Duration = Duration::from_secs(60);
 /// rail the converter (which makes intermod spurs across the band).
 ///
 /// - `floor_dbfs` — the **noise floor**: a low percentile of per-read power, so
-///   transmissions (which are narrow and sparse) don't poison it. A plain mean is
-///   useless here — one packet in the window inflates it by tens of dB. This is
-///   the classic "raise gain until the noise floor lifts off the ADC's own
-///   quantization floor" target, and the control input for automatic gain.
+///   intermittent transmissions (narrow and sparse) don't poison it. A plain mean
+///   is useless here — one packet in the window inflates it by tens of dB. Note it
+///   still cannot reject a *continuous* in-band carrier, which raises every
+///   percentile; observed floor-vs-gain has therefore drifted well over 10 dB
+///   between runs at a fixed gain. Read it as a guide, not an absolute.
 /// - `mean_dbfs` — average wideband power including signals (floor + activity).
 /// - `peak_dbfs` — loudest sample in the window: the headroom indicator.
 /// - `clipped`   — samples pegged at the 0/255 rails. Persistently non-zero means
@@ -198,81 +174,6 @@ impl LevelStats {
     }
 }
 
-/// Software gain manager for [`Gain::Auto`].
-///
-/// Holds the measured **noise floor** at a setpoint by stepping the *fixed* tuner
-/// gain through the tuner's discrete table. Keying off the noise floor (a low
-/// percentile, see [`LevelStats`]) rather than signal peaks is the whole point:
-/// a single strong transmission must not ratchet the gain down and desensitize
-/// every channel for everything that follows — which is exactly what the tuner's
-/// hardware AGC does wrong.
-///
-/// Deliberately slow and hysteretic: the band noise floor drifts over minutes, so
-/// there is no reason to react faster, and every change briefly disturbs the
-/// stream (I²C register writes) and re-baselines the per-channel SNR estimate.
-/// Sustained clipping is a safety backstop that can force a step down.
-struct GainManager {
-    /// Supported gains, tenths dB, ascending.
-    table: Vec<i32>,
-    /// Index into `table` of the current gain.
-    idx: usize,
-    /// Noise-floor setpoint, dBFS.
-    target_dbfs: f32,
-    /// Deadband around the setpoint — no change while inside it.
-    tolerance_db: f32,
-    last_change: Instant,
-}
-
-/// Don't step more often than this: the floor moves over minutes, not seconds.
-const GAIN_MIN_INTERVAL: Duration = Duration::from_secs(30);
-/// Clipping above this share of samples forces a step down regardless of floor.
-const GAIN_CLIP_LIMIT_PCT: f32 = 0.01;
-
-impl GainManager {
-    fn new(table: Vec<i32>, start_tenths: i32, target_dbfs: f32) -> Option<Self> {
-        if table.is_empty() {
-            return None;
-        }
-        // Start at the table entry nearest the configured starting gain.
-        let idx = table
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, g)| (*g - start_tenths).abs())
-            .map(|(i, _)| i)
-            .unwrap_or(0);
-        Some(Self {
-            table,
-            idx,
-            target_dbfs,
-            tolerance_db: 2.0,
-            last_change: Instant::now(),
-        })
-    }
-
-    /// Decide a new gain from this window's stats, or `None` to hold.
-    /// `floor_dbfs` is the signal-immune noise floor; `clip_pct` the safety input.
-    fn decide(&mut self, floor_dbfs: f32, clip_pct: f32) -> Option<i32> {
-        if self.last_change.elapsed() < GAIN_MIN_INTERVAL {
-            return None;
-        }
-        // Safety backstop first: real clipping means back off now.
-        let step_down = clip_pct > GAIN_CLIP_LIMIT_PCT
-            || floor_dbfs > self.target_dbfs + self.tolerance_db;
-        let step_up = !step_down && floor_dbfs < self.target_dbfs - self.tolerance_db;
-
-        let next = if step_down && self.idx > 0 {
-            self.idx - 1
-        } else if step_up && self.idx + 1 < self.table.len() {
-            self.idx + 1
-        } else {
-            return None; // in the deadband, or already at a rail of the table
-        };
-        self.idx = next;
-        self.last_change = Instant::now();
-        Some(self.table[next])
-    }
-}
-
 /// The reader + DSP threads behind a running source; join to shut down cleanly.
 pub struct SdrHandles {
     reader: JoinHandle<()>,
@@ -323,13 +224,12 @@ pub fn spawn(
         freq_correction_ppm: config.freq_correction_ppm,
     };
     let n_channels = config.channels.len();
-    let auto_floor = config.auto_target_floor_dbfs;
     // Decoded-frame counter: bumped by the consumer, drained by the reader into
     // its periodic status line.
     let frames = Arc::new(AtomicU64::new(0));
     let reader_frames = frames.clone();
     let reader = std::thread::spawn(move || {
-        let mut sdr = match RtlSdrSource::open(&dev) {
+        let sdr = match RtlSdrSource::open(&dev) {
             Ok(s) => s,
             Err(e) => {
                 tracing::error!("failed to open RTL-SDR: {e:?}");
@@ -343,30 +243,6 @@ pub fn spawn(
             "RTL-SDR open; {} channel(s)",
             n_channels
         );
-
-        // Software gain manager, only for Gain::Auto.
-        let mut gain_mgr = match dev.gain {
-            Gain::Auto => match sdr.tuner_gains() {
-                Ok(table) => {
-                    let mgr = GainManager::new(table, crate::device::AUTO_START_TENTHS, auto_floor);
-                    if let Some(m) = &mgr {
-                        tracing::info!(
-                            "auto gain: {} steps ({}..{} tenths dB), targeting floor {:.1} dBFS",
-                            m.table.len(),
-                            m.table.first().copied().unwrap_or(0),
-                            m.table.last().copied().unwrap_or(0),
-                            auto_floor,
-                        );
-                    }
-                    mgr
-                }
-                Err(e) => {
-                    tracing::warn!("auto gain unavailable (no gain table: {e:?}); holding fixed");
-                    None
-                }
-            },
-            _ => None,
-        };
 
         let mut dropped: u64 = 0;
         let mut level = LevelStats::default();
@@ -403,21 +279,6 @@ pub fn spawn(
                     level.clipped,
                     level.clip_pct(),
                 );
-
-                // Automatic gain: hold the noise floor at the setpoint.
-                if let Some(mgr) = &mut gain_mgr {
-                    if let Some(tenths) = mgr.decide(level.floor_dbfs(), level.clip_pct()) {
-                        match sdr.set_gain_tenths(tenths) {
-                            Ok(()) => tracing::info!(
-                                "auto gain -> {:.1} dB (floor {:.1} dBFS, target {:.1})",
-                                tenths as f32 / 10.0,
-                                level.floor_dbfs(),
-                                auto_floor,
-                            ),
-                            Err(e) => tracing::warn!("failed to set gain {tenths}: {e:?}"),
-                        }
-                    }
-                }
 
                 level = LevelStats::default();
                 last_report = Instant::now();
@@ -485,65 +346,4 @@ pub fn spawn(
     });
 
     (packets, SdrHandles { reader, dsp }, frames)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A manager on a simple table, with the rate limit already satisfied.
-    fn mgr(start: i32) -> GainManager {
-        let mut m = GainManager::new(vec![0, 100, 200, 300, 400, 496], start, -25.0).unwrap();
-        m.last_change = Instant::now() - GAIN_MIN_INTERVAL - Duration::from_secs(1);
-        m
-    }
-
-    #[test]
-    fn starts_at_nearest_table_entry() {
-        // 300 is in the table; 250 should snap to the nearest (200 or 300).
-        assert_eq!(mgr(300).table[mgr(300).idx], 300);
-        let m = mgr(260);
-        assert_eq!(m.table[m.idx], 300);
-    }
-
-    #[test]
-    fn holds_inside_the_deadband() {
-        // Floor exactly on target: no change.
-        assert_eq!(mgr(300).decide(-25.0, 0.0), None);
-        // Within tolerance either side: still no change.
-        assert_eq!(mgr(300).decide(-26.5, 0.0), None);
-        assert_eq!(mgr(300).decide(-23.5, 0.0), None);
-    }
-
-    #[test]
-    fn floor_too_high_steps_down_too_low_steps_up() {
-        // Floor well above target (too much gain) -> step down.
-        assert_eq!(mgr(300).decide(-15.0, 0.0), Some(200));
-        // Floor well below target (too little gain) -> step up.
-        assert_eq!(mgr(300).decide(-40.0, 0.0), Some(400));
-    }
-
-    #[test]
-    fn clipping_forces_a_step_down_even_when_floor_looks_fine() {
-        // Floor is on target, but the front end is railing: back off anyway.
-        let mut m = mgr(300);
-        assert_eq!(m.decide(-25.0, GAIN_CLIP_LIMIT_PCT * 10.0), Some(200));
-    }
-
-    #[test]
-    fn rate_limited_between_changes() {
-        let mut m = mgr(300);
-        assert_eq!(m.decide(-15.0, 0.0), Some(200)); // first step allowed
-        assert_eq!(m.decide(-15.0, 0.0), None); // immediate re-step suppressed
-    }
-
-    #[test]
-    fn clamps_at_the_ends_of_the_table() {
-        // At the bottom rung, a step-down request can't go lower.
-        let mut low = mgr(0);
-        assert_eq!(low.decide(-5.0, 1.0), None);
-        // At the top rung, a step-up request can't go higher.
-        let mut high = mgr(496);
-        assert_eq!(high.decide(-50.0, 0.0), None);
-    }
 }

@@ -36,7 +36,7 @@
 center_hz = 145080000                   # tuner centre (offset from the channels)
 channels_hz = [144390000,144340000,144360000,144905000,145535000,145645000,145710000,145765000,145825000]               # one entry per frequency; ssrc = freq_kHz
 sample_rate = 2160000                   # ~1.9 MHz usable at 2.4 MSPS if you need span
-gain = 402                              # tuner gain in tenths dB, or "auto" for AGC
+gain = 402                              # tuner gain in tenths dB (max ~496), or "hw-agc"
 # ppm = 0                                 # frequency correction
 # fm_maxdev_hz = 20000.0                  # FM deviation mapped to full-scale audio (rec level)
 # squelch_open_db = 4.0                   # squelch open threshold (dB SNR)
