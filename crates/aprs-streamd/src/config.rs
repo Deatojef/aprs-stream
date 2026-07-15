@@ -14,17 +14,83 @@ use serde::Deserialize;
 const SEARCH_PATHS: &[&str] = &["config.toml", "/etc/aprs-streamd/config.toml"];
 
 /// Top-level configuration file.
+///
+/// Exactly one audio source must be configured: `[source]` (ka9q-radio RTP) or
+/// `[sdr]` (direct RTL-SDR). Both share the `[decoder]` tuning and `[emit]` side,
+/// so flipping between them for a like-for-like comparison is a one-section edit.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// RTP audio source (ka9q-radio). Required.
-    pub source: aprs_rtp::config::SourceConfig,
+    /// RTP audio source (ka9q-radio). Mutually exclusive with `[sdr]`.
+    #[serde(default)]
+    pub source: Option<aprs_rtp::config::SourceConfig>,
+    /// Direct RTL-SDR source. Mutually exclusive with `[source]`.
+    #[serde(default)]
+    pub sdr: Option<SdrSection>,
     /// Decoder/demodulator tuning. Optional; defaults to aprs-rtp's defaults.
     #[serde(default)]
     pub decoder: aprs_rtp::config::DecoderConfig,
     /// Publish side. Optional; defaults to the on-subnet multicast group.
     #[serde(default)]
     pub emit: EmitSection,
+}
+
+/// The `[sdr]` table — direct RTL-SDR capture (see `aprs-sdr`).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SdrSection {
+    /// Dongle index.
+    #[serde(default)]
+    pub device: usize,
+    /// Tuner centre frequency, Hz. Offset from the channels so none sits on DC.
+    pub center_hz: u32,
+    /// Channel centre frequencies, Hz. Each becomes `ssrc = freq_kHz`.
+    pub channels_hz: Vec<u32>,
+    /// Complex sample rate, Hz.
+    #[serde(default = "default_sample_rate")]
+    pub sample_rate: u32,
+    /// Tuner gain: a number (tenths of a dB, e.g. 400), `"auto"` (software gain
+    /// manager holding the noise floor at `auto_floor_dbfs`), or `"hw-agc"` (the
+    /// tuner's own AGC — rarely wanted; overload-prone).
+    #[serde(default = "default_gain")]
+    pub gain: GainSetting,
+    /// Noise-floor setpoint in dBFS for `gain = "auto"`. Higher = more gain (better
+    /// sensitivity, less headroom). See the `front-end level` log line.
+    #[serde(default = "default_auto_floor")]
+    pub auto_floor_dbfs: f32,
+    /// Frequency correction, ppm.
+    #[serde(default)]
+    pub ppm: i32,
+    /// FM deviation (Hz) mapped to full-scale audio — the `rec` level knob.
+    #[serde(default)]
+    pub fm_maxdev_hz: Option<f32>,
+    /// Squelch open threshold, dB SNR.
+    #[serde(default)]
+    pub squelch_open_db: Option<f32>,
+    /// Squelch close threshold, dB SNR.
+    #[serde(default)]
+    pub squelch_close_db: Option<f32>,
+    /// Enable ka9q-style FM de-emphasis (default off).
+    #[serde(default)]
+    pub deemphasis: bool,
+}
+
+/// Tuner gain from TOML: `gain = 400` (tenths dB) or `gain = "auto"` (AGC).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum GainSetting {
+    Tenths(i32),
+    Mode(String),
+}
+
+fn default_sample_rate() -> u32 {
+    1_200_000
+}
+fn default_gain() -> GainSetting {
+    GainSetting::Tenths(400)
+}
+fn default_auto_floor() -> f32 {
+    aprs_sdr::source::DEFAULT_AUTO_FLOOR_DBFS
 }
 
 /// The `[emit]` table.

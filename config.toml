@@ -8,11 +8,13 @@
 #
 # Commented-out keys show their built-in default; uncomment to override.
 
-# ── RTP audio source ────────────────────────────────────────────────────────
+# ── Audio source (choose EXACTLY ONE of [source] or [sdr]) ───────────────────
+
+# ── Option A: RTP audio source (ka9q-radio) ─────────────────────────────────
 # Where aprs-streamd listens for ka9q-radio PCM audio (handled by aprs-rtp).
-[source]
+#[source]
 # mDNS hostname (e.g. "packet.local") or a raw multicast address (e.g. "239.0.0.1").
-host = "packet.local"
+#host = "packet.local"
 # RTP port.
 # port = 5004
 # Network interface IP to bind to. Empty / omitted = OS default. Set explicitly
@@ -23,6 +25,23 @@ host = "packet.local"
 # SSRC allowlist. Empty = accept every SSRC on the group. Each SSRC maps 1:1 to a
 # radiod demodulator channel (frequency).
 # ssrc = [144390, 144340]
+
+# ── Option B: direct RTL-SDR source (no ka9q-radio) ─────────────────────────
+# Comment out [source] above and uncomment this to capture straight from a dongle.
+# The channelizer slices all channels from one wideband capture; keep every
+# channel within ±(0.8 · sample_rate/2) of the centre, and offset the centre so no
+# channel sits on 0 Hz (the RTL DC spike).
+[sdr]
+# device = 0                              # dongle index
+center_hz = 145080000                   # tuner centre (offset from the channels)
+channels_hz = [144390000,144340000,144360000,144905000,145535000,145645000,145710000,145765000,145825000]               # one entry per frequency; ssrc = freq_kHz
+sample_rate = 2160000                   # ~1.9 MHz usable at 2.4 MSPS if you need span
+gain = 402                              # tuner gain in tenths dB, or "auto" for AGC
+# ppm = 0                                 # frequency correction
+# fm_maxdev_hz = 20000.0                  # FM deviation mapped to full-scale audio (rec level)
+# squelch_open_db = 4.0                   # squelch open threshold (dB SNR)
+# squelch_close_db = 2.0                  # squelch close threshold (dB SNR)
+# deemphasis = false                      # true = ka9q-style de-emphasis
 
 # ── Decoder tuning ──────────────────────────────────────────────────────────
 # AFSK demodulator / slicer settings (aprs-rtp). Defaults suit standard 1200-baud

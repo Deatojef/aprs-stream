@@ -94,6 +94,12 @@ fn print_meta(frame: &aprs_stream::AprsFrame) {
         None => println!("    ax25: <none>"),
     }
 
+    // SNR is provided by the SDR producer (None from the RTP producer).
+    let snr = frame
+        .rf
+        .snr_db
+        .map(|s| format!("{s:.1}dB"))
+        .unwrap_or_else(|| "-".into());
     match &frame.rf.slicer_gains {
         Some(g) => {
             // Show the ladder as twist dB (20·log10 gain) — the waterfall labels.
@@ -102,13 +108,14 @@ fn print_meta(frame: &aprs_stream::AprsFrame) {
                 .map(|x| format!("{:+.0}", 20.0 * x.log10()))
                 .collect();
             println!(
-                "    rf: slicers={} twist_db=[{}] mask={:#06x}",
+                "    rf: snr={} slicers={} twist_db=[{}] mask={:#06x}",
+                snr,
                 g.len(),
                 twist.join(","),
                 frame.rf.slicer_mask.unwrap_or(0),
             );
         }
-        None => println!("    rf: slicer_gains <none>"),
+        None => println!("    rf: snr={snr} slicer_gains <none>"),
     }
 }
 

@@ -8,3 +8,7 @@
 pub mod channelize;
 pub mod device;
 pub mod fm;
+pub mod source;
+
+pub use device::Gain;
+pub use source::{spawn, FmParams, SdrHandles, SdrSourceConfig};
