@@ -2,9 +2,9 @@
 
 `aprs-streamd` ships as a Debian package (`.deb`) and runs as an unattended
 systemd service — on a 64-bit Raspberry Pi (aarch64 / Raspberry Pi OS) or any
-x86_64 Debian/Ubuntu host. It listens to ka9q-radio RTP audio and republishes
-decoded, typed APRS frames on the LAN. Once installed it just runs: auto-starts
-on boot, restarts on failure.
+x86_64 Debian/Ubuntu host. It captures APRS from a directly-attached RTL-SDR or
+from ka9q-radio RTP audio, and republishes decoded, typed frames on the LAN. Once
+installed it just runs: auto-starts on boot, restarts on failure.
 
 ## Install
 
@@ -28,12 +28,63 @@ starts the service.
 
 (Verify the download first if you like: `sha256sum -c SHA256SUMS`.)
 
-Then point it at your RTP source and restart:
+Then point it at an audio source and restart:
 
 ```sh
-sudo nano /etc/aprs-streamd/config.toml     # set [source] host
+sudo nano /etc/aprs-streamd/config.toml     # set [source] (RTP) or [sdr]
 sudo systemctl restart aprs-streamd
 ```
+
+## Extra setup for the direct-SDR source
+
+Skip this if you use the ka9q-radio `[source]` path — it needs nothing beyond the
+network.
+
+Running `[sdr]` means the service talks to a USB dongle, which needs three things
+the default install does **not** provide:
+
+**1. Release the dongle from the DVB driver.** The kernel claims RTL-SDR hardware
+as a TV tuner by default:
+
+```sh
+echo -e 'blacklist dvb_usb_rtl28xxu\nblacklist rtl2832\nblacklist rtl2830' \
+  | sudo tee /etc/modprobe.d/blacklist-rtlsdr.conf
+sudo modprobe -r dvb_usb_rtl28xxu rtl2832_sdr rtl2832    # or reboot
+```
+
+**2. Let the service user reach the device.** The service runs as the unprivileged
+`aprs-streamd` user, which has no USB access by default:
+
+```sh
+# udev rule granting the plugdev group access to RTL-SDR dongles
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", MODE="0660", GROUP="plugdev"' \
+  | sudo tee /etc/udev/rules.d/60-rtlsdr.rules
+sudo usermod -aG plugdev aprs-streamd
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+**3. Allow device access through the unit's hardening.** The shipped unit sets
+`PrivateDevices=true`, which gives the service a private `/dev` containing only
+pseudo-devices — so USB nodes are invisible and the dongle **cannot** be opened.
+The package ships a ready-made drop-in that relaxes exactly this and nothing else;
+copy it into place (drop-ins survive package upgrades, and the default unit stays
+hardened for RTP users):
+
+```sh
+sudo mkdir -p /etc/systemd/system/aprs-streamd.service.d
+sudo cp /usr/share/doc/aprs-streamd/sdr-override.conf \
+        /etc/systemd/system/aprs-streamd.service.d/sdr.conf
+sudo systemctl daemon-reload
+sudo systemctl restart aprs-streamd
+```
+
+It sets `PrivateDevices=false` (so `/dev/bus/usb` is reachable),
+`DeviceAllow=char-usb_device rw` (only USB character devices — the rest of `/dev`
+stays denied), and `SupplementaryGroups=plugdev` to match the udev rule above.
+Edit the group if your rule uses a different one.
+
+If any of these are missing you'll see `failed to open RTL-SDR` in the journal.
+Confirm the dongle is visible with `lsusb | grep -i realtek`.
 
 ## Operate
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=APRS stream base service (RTP -> decode -> publish typed frames)
+Description=APRS stream base service (SDR/RTP -> decode -> publish typed frames)
 Documentation=https://github.com/Deatojef/aprs-stream
 After=network-online.target
 Wants=network-online.target

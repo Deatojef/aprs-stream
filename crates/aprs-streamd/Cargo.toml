@@ -31,15 +31,18 @@ priority = "optional"
 depends = "$auto, adduser"
 extended-description = """\
 Base service for the disaggregated APRS pipeline. Demodulates and decodes APRS \
-packets from ka9q-radio RTP multicast audio and republishes fully-decoded, \
-richly-typed APRS frames on the LAN for downstream consumers (igate, logger, \
-trackers) to subscribe to."""
+packets from a directly-attached RTL-SDR or from ka9q-radio RTP multicast audio, \
+and republishes fully-decoded, richly-typed APRS frames on the LAN for downstream \
+consumers (igate, logger, trackers) to subscribe to."""
 assets = [
     ["target/release/aprs-streamd", "usr/bin/", "755"],
     ["../../config.toml", "etc/aprs-streamd/config.toml", "644"],
     ["../../deploy/aprs-streamd.default", "etc/default/aprs-streamd", "644"],
     ["../../README.md", "usr/share/doc/aprs-streamd/README.md", "644"],
     ["../../deploy/README.md", "usr/share/doc/aprs-streamd/DEPLOY.md", "644"],
+    # Example systemd drop-in enabling USB access for the [sdr] source. Shipped as
+    # documentation, not installed into systemd — the default stays hardened.
+    ["../../deploy/sdr-override.conf", "usr/share/doc/aprs-streamd/sdr-override.conf", "644"],
 ]
 # Preserve local edits across upgrades (also auto-detected for /etc, but explicit).
 conf-files = ["/etc/aprs-streamd/config.toml", "/etc/default/aprs-streamd"]

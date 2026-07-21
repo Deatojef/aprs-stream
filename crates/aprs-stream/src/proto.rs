@@ -45,10 +45,10 @@ pub struct AprsFrame {
     /// RF / signal-quality metadata. Individual metrics are optional.
     pub rf: RfMeta,
 
-    /// Whether the AX.25 frame's FCS (CRC) validated. The current producer
-    /// (aprs-rtp) only emits FCS-valid frames, so this is `true` today; the
-    /// field exists so a future producer can publish failures for SNR/
-    /// propagation logging (decision #6) without a schema change.
+    /// Whether the AX.25 frame's FCS (CRC) validated. Both current producers
+    /// (the direct-SDR and RTP capture paths) only emit FCS-valid frames, so this
+    /// is `true` today; the field exists so a future producer can publish failures
+    /// for SNR/propagation logging without a schema change.
     pub crc_ok: bool,
 
     /// Raw AX.25 frame bytes (FCS excluded), always present so nothing is ever
