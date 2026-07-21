@@ -162,4 +162,4 @@ Running on a Raspberry Pi 5. Representative measurements from a 9-channel
 
 ## License
 
-Apache-2.0
+GPL-3.0
