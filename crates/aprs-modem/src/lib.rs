@@ -11,8 +11,8 @@
 
 pub(crate) mod afsk;
 pub(crate) mod aprs;
-pub(crate) mod ax25;
 pub(crate) mod audio;
+pub(crate) mod ax25;
 pub mod config;
 pub(crate) mod dsp;
 pub mod error;

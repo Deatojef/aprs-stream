@@ -122,8 +122,16 @@ mod tests {
         // Endpoints in dB map to their linear-gain equivalents.
         let g = space_gains(8, -12.0, 9.0);
         assert_eq!(g.len(), 8);
-        assert!((g[0] - twist_db_to_gain(-12.0)).abs() < 1e-5, "first gain = {}", g[0]);
-        assert!((g[7] - twist_db_to_gain(9.0)).abs() < 1e-5, "last gain = {}", g[7]);
+        assert!(
+            (g[0] - twist_db_to_gain(-12.0)).abs() < 1e-5,
+            "first gain = {}",
+            g[0]
+        );
+        assert!(
+            (g[7] - twist_db_to_gain(9.0)).abs() < 1e-5,
+            "last gain = {}",
+            g[7]
+        );
     }
 
     #[test]
@@ -131,7 +139,11 @@ mod tests {
         // The default −12..+9 dB / 8-rung ladder has a 3 dB step, so rung 4 is
         // exactly 0 dB (unity gain).
         let g = space_gains(8, -12.0, 9.0);
-        assert!((g[4] - 1.0).abs() < 1e-5, "rung 4 = {} (expected unity)", g[4]);
+        assert!(
+            (g[4] - 1.0).abs() < 1e-5,
+            "rung 4 = {} (expected unity)",
+            g[4]
+        );
     }
 
     #[test]

@@ -14,7 +14,6 @@ use rtl_sdr_rs::{DeviceId, RtlSdr, TunerGain};
 /// decoder queue. `94 * 512 = 48 128` bytes = 24 064 I/Q samples.
 pub const READ_BYTES: usize = 94 * 512;
 
-
 /// Tuner gain mode.
 ///
 /// All of these drive the R820T2's *analog* LNA + mixer gain (ahead of the ADC);

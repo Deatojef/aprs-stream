@@ -9,7 +9,7 @@
 //! the FCS/CRC in `hdlc::fec` (CRC-16 X.25, poly 0x8408, init 0xFFFF, complemented,
 //! stored little-endian).
 
-use aprs_modem::{decode_audio_stream, AudioBlock, DecoderConfig};
+use aprs_modem::{AudioBlock, DecoderConfig, decode_audio_stream};
 
 const SAMPLE_RATE: u32 = 24_000;
 const BAUD: u32 = 1_200;

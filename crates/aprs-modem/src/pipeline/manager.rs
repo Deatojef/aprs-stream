@@ -1,12 +1,7 @@
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-use crate::{
-    AprsPacket,
-    audio::AudioBlock,
-    config::DecoderConfig,
-    pipeline::stream_decoder,
-};
+use crate::{AprsPacket, audio::AudioBlock, config::DecoderConfig, pipeline::stream_decoder};
 
 /// Receive `AudioBlock`s from any source and dispatch each to a per-SSRC
 /// `StreamDecoder` blocking task, creating new decoders on first sight of an SSRC.

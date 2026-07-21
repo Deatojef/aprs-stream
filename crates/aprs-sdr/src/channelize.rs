@@ -163,13 +163,7 @@ impl Channelizer {
             self.fwd.process(&mut self.block);
 
             for ch in &mut self.channels {
-                out.push(extract_channel(
-                    ch,
-                    &self.block,
-                    self.n,
-                    self.ns,
-                    self.olen,
-                ));
+                out.push(extract_channel(ch, &self.block, self.n, self.ns, self.olen));
             }
         }
         out

@@ -153,7 +153,9 @@ fn noise(n: usize, amp: f32, seed: u64) -> Vec<Complex<f32>> {
         s ^= s << 17;
         (s >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0 // ~[-1,1]
     };
-    (0..n).map(|_| Complex::new(next() * amp, next() * amp)).collect()
+    (0..n)
+        .map(|_| Complex::new(next() * amp, next() * amp))
+        .collect()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -196,9 +198,13 @@ async fn squelch_mutes_noise_and_reports_snr() {
             let is_settled_noise = (in_pos >= block_in * 10 && in_pos < signal_start)
                 || in_pos >= signal_end + block_in * 2;
             if is_signal {
-                sig_audio += energy; sig_n += 1; sig_snr = sig_snr.max(fm.signal.snr_db);
+                sig_audio += energy;
+                sig_n += 1;
+                sig_snr = sig_snr.max(fm.signal.snr_db);
             } else if is_settled_noise {
-                noise_audio += energy; noise_n += 1; noise_snr = noise_snr.max(fm.signal.snr_db);
+                noise_audio += energy;
+                noise_n += 1;
+                noise_snr = noise_snr.max(fm.signal.snr_db);
             }
             recovered.extend_from_slice(&fm.audio);
             in_pos += block_in;
@@ -211,18 +217,32 @@ async fn squelch_mutes_noise_and_reports_snr() {
     );
 
     // Squelch mutes the noise regions but passes the packet.
-    assert!(sig_audio > 0.05, "signal region should carry audio: {sig_audio}");
-    assert!(noise_audio < 0.02, "noise region should be squelched: {noise_audio}");
+    assert!(
+        sig_audio > 0.05,
+        "signal region should carry audio: {sig_audio}"
+    );
+    assert!(
+        noise_audio < 0.02,
+        "noise region should be squelched: {noise_audio}"
+    );
     // SNR metric clearly separates carrier from noise.
     assert!(sig_snr > 6.0, "signal SNR should be high: {sig_snr}");
-    assert!(sig_snr > noise_snr + 3.0, "signal SNR {sig_snr} vs noise {noise_snr}");
+    assert!(
+        sig_snr > noise_snr + 3.0,
+        "signal SNR {sig_snr} vs noise {noise_snr}"
+    );
 
     // And the packet still decodes cleanly through the squelched chain.
     let (tx, rx) = tokio::sync::mpsc::channel::<AudioBlock>(4);
     let mut packets = decode_audio_stream(DecoderConfig::default(), rx);
-    tx.send(AudioBlock { ssrc: SSRC, sample_rate: AUDIO_FS, samples: recovered, signal: None })
-        .await
-        .unwrap();
+    tx.send(AudioBlock {
+        ssrc: SSRC,
+        sample_rate: AUDIO_FS,
+        samples: recovered,
+        signal: None,
+    })
+    .await
+    .unwrap();
     drop(tx);
     let pkt = tokio::time::timeout(std::time::Duration::from_secs(10), packets.recv())
         .await

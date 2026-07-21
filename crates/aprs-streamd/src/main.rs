@@ -173,7 +173,9 @@ fn to_gain(g: &GainSetting) -> aprs_sdr::Gain {
         GainSetting::Tenths(n) => aprs_sdr::Gain::Manual(*n),
         GainSetting::Mode(s) if s.eq_ignore_ascii_case("hw-agc") => aprs_sdr::Gain::HardwareAgc,
         GainSetting::Mode(s) => {
-            tracing::warn!("unknown gain '{s}' (expected a number or \"hw-agc\"); using fixed 400 (40 dB)");
+            tracing::warn!(
+                "unknown gain '{s}' (expected a number or \"hw-agc\"); using fixed 400 (40 dB)"
+            );
             aprs_sdr::Gain::Manual(400)
         }
     }

@@ -46,7 +46,10 @@ async fn wait_for_shutdown() {
 }
 
 fn env_u32(key: &str, default: u32) -> u32 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 fn env_opt_f32(key: &str) -> Option<f32> {
@@ -55,7 +58,11 @@ fn env_opt_f32(key: &str) -> Option<f32> {
 
 fn env_bool(key: &str) -> bool {
     matches!(
-        std::env::var(key).ok().as_deref().map(str::to_ascii_lowercase).as_deref(),
+        std::env::var(key)
+            .ok()
+            .as_deref()
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
         Some("1" | "on" | "true" | "yes")
     )
 }
@@ -78,7 +85,9 @@ fn parse_gain() -> Gain {
 
 fn main() {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_target(false)
         .init();
 

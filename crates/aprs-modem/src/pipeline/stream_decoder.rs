@@ -6,10 +6,10 @@ use crate::{
     AprsPacket,
     afsk::AfskDemodulator,
     aprs::text::to_tnc2,
+    audio::AudioBlock,
     ax25::frame::Ax25Frame,
     config::{DecoderConfig, FixBits},
     hdlc::{fec::try_validate, framer::HdlcDecoder},
-    audio::AudioBlock,
 };
 
 // Suppress re-emission of a frame with identical raw AX.25 bytes from the same
