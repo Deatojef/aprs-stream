@@ -57,7 +57,7 @@ sudo modprobe -r dvb_usb_rtl28xxu rtl2832_sdr rtl2832    # or reboot
 
 ```sh
 # udev rule granting the plugdev group access to RTL-SDR dongles
-echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", MODE="0660", GROUP="plugdev"' \
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", MODE="0666", GROUP="plugdev"' \
   | sudo tee /etc/udev/rules.d/60-rtlsdr.rules
 sudo usermod -aG plugdev aprs-streamd
 sudo udevadm control --reload-rules && sudo udevadm trigger
