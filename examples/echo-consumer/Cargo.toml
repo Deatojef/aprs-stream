@@ -10,3 +10,5 @@ publish = false
 [dependencies]
 aprs-stream = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
+toml = "0.8"

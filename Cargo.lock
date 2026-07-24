@@ -195,7 +195,9 @@ name = "echo-consumer"
 version = "0.1.0"
 dependencies = [
  "aprs-stream",
+ "serde",
  "tokio",
+ "toml",
 ]
 
 [[package]]

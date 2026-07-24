@@ -5,19 +5,80 @@
 //! directly on the typed payload (`aprs_decode::AprsData`).
 
 use std::net::Ipv4Addr;
+use std::path::Path;
 
 use aprs_stream::aprs_decode::{AprsData, AprsPacket};
 use aprs_stream::proto::Ax25Meta;
 use aprs_stream::subscribe::{SubscribeConfig, Subscriber};
+use serde::Deserialize;
 
-/// Must match `aprs-streamd`'s default group / port.
+/// Must match `aprs-streamd`'s default group / port. Used when no config file is
+/// found and the matching env var is unset.
 const DEFAULT_GROUP: Ipv4Addr = Ipv4Addr::new(239, 12, 34, 56);
 const DEFAULT_PORT: u16 = 17_014;
 
+/// Where we look for `aprs-streamd`'s config, in priority order: the deployed
+/// location first, then a local `./config.toml` for development.
+const SEARCH_PATHS: &[&str] = &["/etc/aprs-streamd/config.toml", "config.toml"];
+
+/// The subset of `aprs-streamd`'s config file this consumer cares about: just the
+/// `[emit]` group/port so it subscribes to the same place the producer publishes.
+/// `deny_unknown_fields` is intentionally OFF so the `[sdr]`, `[decoder]`, etc.
+/// tables are simply ignored rather than rejected.
+#[derive(Debug, Default, Deserialize)]
+struct StreamdConfig {
+    #[serde(default)]
+    emit: EmitSection,
+}
+
+#[derive(Debug, Deserialize)]
+struct EmitSection {
+    #[serde(default = "default_group")]
+    group: Ipv4Addr,
+    #[serde(default = "default_port")]
+    port: u16,
+}
+
+impl Default for EmitSection {
+    fn default() -> Self {
+        Self {
+            group: default_group(),
+            port: default_port(),
+        }
+    }
+}
+
+fn default_group() -> Ipv4Addr {
+    DEFAULT_GROUP
+}
+fn default_port() -> u16 {
+    DEFAULT_PORT
+}
+
+/// Read the first existing config file from [`SEARCH_PATHS`] and pull out the
+/// emit group/port. Returns the defaults if no file is found; a malformed file is
+/// surfaced as an error rather than silently ignored.
+fn load_emit() -> Result<(Ipv4Addr, u16), Box<dyn std::error::Error>> {
+    for path in SEARCH_PATHS.iter().map(Path::new) {
+        if !path.exists() {
+            continue;
+        }
+        let text = std::fs::read_to_string(path)?;
+        let cfg: StreamdConfig = toml::from_str(&text)
+            .map_err(|e| format!("failed to parse {}: {e}", path.display()))?;
+        eprintln!("echo-consumer: using config {}", path.display());
+        return Ok((cfg.emit.group, cfg.emit.port));
+    }
+    eprintln!("echo-consumer: no config file found, using defaults");
+    Ok((DEFAULT_GROUP, DEFAULT_PORT))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let group: Ipv4Addr = parse_env("APRS_EMIT_GROUP", DEFAULT_GROUP);
-    let port: u16 = parse_env("APRS_EMIT_PORT", DEFAULT_PORT);
+    // Config file supplies the group/port; env vars still override for ad-hoc runs.
+    let (cfg_group, cfg_port) = load_emit()?;
+    let group: Ipv4Addr = parse_env("APRS_EMIT_GROUP", cfg_group);
+    let port: u16 = parse_env("APRS_EMIT_PORT", cfg_port);
 
     let sub = Subscriber::new(SubscribeConfig::new(group, port))?;
     eprintln!("echo-consumer: joined {group}:{port}, waiting for frames...");
